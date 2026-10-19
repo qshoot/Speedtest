@@ -113,7 +113,6 @@
 
     <div class="speed-footer" id="speed-footer"></div>
   </div>
-  <div id="localStats" style="position:fixed;bottom:10px;left:0;right:0;text-align:center;font-size:12px;color:#9ca3af;pointer-events:none;z-index:10;"></div>
 
   <script>
   // ==================== 密码门逻辑 ====================
@@ -134,24 +133,9 @@
     const t = Number(localStorage.getItem(PASS_OK_KEY) || 0);
     return t > 0 && (Date.now() - t) < PASS_TTL;
   }
-  // ---------- 本机流量累计（localStorage，仅当前浏览器）----------
-  const ST_KEY = 'st_local_stats';
-  function readStats(){ try{ return JSON.parse(localStorage.getItem(ST_KEY)) || {b:0,c:0}; }catch(e){ return {b:0,c:0}; } }
-  function addStats(bytes){
-    const t = readStats(); t.b += bytes; t.c += 1;
-    try{ localStorage.setItem(ST_KEY, JSON.stringify(t)); }catch(e){}
-    renderStats();
-  }
-  function renderStats(){
-    const t = readStats();
-    const el = document.getElementById('localStats');
-    if(el) el.textContent = '本机累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次';
-  }
-
   function enterMain(){
     document.getElementById('pwdGate').style.display='none';
     document.getElementById('mainCard').style.display='block';
-    renderStats();
     initMain();
   }
   window.addEventListener('DOMContentLoaded', () => {
@@ -424,8 +408,6 @@
             speedEl.style.color = color;
             speedAltEl.style.color = color;
           }
-
-          addStats(receivedBytes);
 
           if (!deadNode && parseFloat(mbps) >= stopThreshold) {
             stopLoop = true;
