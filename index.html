@@ -33,6 +33,7 @@
     #pwdErr{color:var(--c-red);font-size:14px;text-align:center;margin-top:12px;display:none}
     @media (max-width:480px){.logo-text{font-size:36px}.card{padding:32px 20px}.results{grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px}.metric{padding:12px 6px;min-width:0;word-break:break-all}}
   </style>
+<base target="_blank">
 </head>
 <body>
   <!-- ==================== 密码门（部署前改这里） ====================
@@ -61,8 +62,7 @@
     <div class="input-group">
       <label for="size">文件大小（GitHub Pages 同源自带文件）</label>
       <select id="size">
-        <option value="5" selected>5 MB</option>
-        <option value="10">10 MB</option>
+        <option value="10" selected>10 MB</option>
       </select>
     </div>
 
@@ -85,7 +85,7 @@
     <div class="input-row">
       <div class="input-group">
         <label for="testCount">测试次数 (次)</label>
-        <input id="testCount" type="number" value="0" min="0" max="999">
+        <input id="testCount" type="number" value="5" min="0" max="999">
       </div>
       <div class="input-group">
         <label for="stopThreshold">停止阈值 (Mbps)</label>
@@ -111,17 +111,27 @@
     </div>
 
     <div class="speed-footer" id="speed-footer"></div>
-    <div class="test-info" id="localStats" style="margin-top:10px;"></div>
   </div>
+  <div id="localStats" style="position:fixed;bottom:10px;left:0;right:0;text-align:center;font-size:12px;color:#9ca3af;pointer-events:none;z-index:10;"></div>
 
   <script>
   // ==================== 密码门逻辑 ====================
+  const PASS_OK_KEY = 'st_pass_ok';         // 通过缓存的存储键
+  const PASS_TTL = 7 * 24 * 3600 * 1000;    // 免密有效期：7天
+
   function tryEnter(){
     const p = document.getElementById('pwd').value.trim();
     const err = document.getElementById('pwdErr');
     if(!PAGE_PASSWORD){ enterMain(); return; }
-    if(p === PAGE_PASSWORD){ enterMain(); }
+    if(p === PAGE_PASSWORD){
+      try{ localStorage.setItem(PASS_OK_KEY, String(Date.now())); }catch(e){}
+      enterMain();
+    }
     else { err.style.display='block'; err.textContent = p ? '密码错误' : '密码不能为空'; }
+  }
+  function passCached(){
+    const t = Number(localStorage.getItem(PASS_OK_KEY) || 0);
+    return t > 0 && (Date.now() - t) < PASS_TTL;
   }
   // ---------- 本机流量累计（localStorage，仅当前浏览器）----------
   const ST_KEY = 'st_local_stats';
@@ -130,63 +140,21 @@
     const t = readStats(); t.b += bytes; t.c += 1;
     try{ localStorage.setItem(ST_KEY, JSON.stringify(t)); }catch(e){}
     renderStats();
-    gbAdd(bytes);
   }
   function renderStats(){
     const t = readStats();
     const el = document.getElementById('localStats');
-    if(el) el.textContent = '本机累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次' + (GB_TOTAL ? ' ｜ 全站加载中…' : '');
-  }
-
-  // ---------- 全站累计（JSONBin 公共计数器，跨设备汇总）----------
-  // 用法：jsonbin.io 注册 → 新建 Bin（内容填 {"b":0,"c":0}）→ 把 Bin ID 和 X-Master-Key 填到下面。
-  // 不想用就留空字符串，页面只显示本机累计，无任何影响。
-  
-  const GB_BIN_ID = '6ad5efeeac6210605a3e6b37';  //← CMD执行 curl.exe -x http://127.0.0.1:10808 -X POST "https://api.jsonbin.io/v3/b" -H "X-Master-Key: $2b$10$你的KEY" -H "Content-Type: application/json" -d "{\"b\":0,\"c\":0}"
-  const GB_KEY    = '$2a$10$03qSBkFkVUR9BZHdh8PNk.TSQUhzaw0IUfrcvIxqa20ACKnH0wHVK';//← 替换成 $2b$10$ 开头的那个 Key
-  const GB_API    = 'https://api.jsonbin.io/v3/b/';
-  let GB_TOTAL = false;
-  async function gbFetch(){
-    const r = await fetch(GB_API + GB_BIN_ID + '/latest', {headers:{'X-Master-Key': GB_KEY}, cache:'no-store'});
-    if(!r.ok) throw new Error(r.status);
-    const j = await r.json();
-    return j.record || {b:0,c:0};
-  }
-  async function gbSave(t){
-    await fetch(GB_API + GB_BIN_ID, {
-      method:'PUT', cache:'no-store',
-      headers:{'X-Master-Key': GB_KEY, 'Content-Type':'application/json'},
-      body: JSON.stringify(t)
-    });
-  }
-  function renderTotal(t){
-    const el = document.getElementById('localStats');
-    if(el) el.textContent = '本机累计：' + (readStats().b/1048576).toFixed(1) + ' MB / ' + readStats().c + ' 次'
-      + ' ｜ 全站累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次';
-  }
-  async function gbLoad(){
-    if(!GB_BIN_ID || !GB_KEY) return;
-    GB_TOTAL = true;
-    try{ renderTotal(await gbFetch()); }catch(e){ /* 保持本机口径 */ }
-  }
-  async function gbAdd(bytes){
-    if(!GB_BIN_ID || !GB_KEY) return;
-    try{
-      const t = await gbFetch();
-      t.b += bytes; t.c += 1;
-      await gbSave(t);
-      renderTotal(t);
-    }catch(e){ /* 网络失败时静默，下轮再试 */ }
+    if(el) el.textContent = '本机累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次';
   }
 
   function enterMain(){
     document.getElementById('pwdGate').style.display='none';
     document.getElementById('mainCard').style.display='block';
     renderStats();
-    gbLoad();
     initMain();
   }
   window.addEventListener('DOMContentLoaded', () => {
+    if(PAGE_PASSWORD && passCached()){ enterMain(); return; }   // ★7天内免密直达
     if(PAGE_PASSWORD){
       document.getElementById('pwdGate').style.display='flex';
     } else {
@@ -261,7 +229,7 @@
       const respTimeout = Math.max(1, Number(document.getElementById("respTimeout").value) || 2);
       const testCountRaw = document.getElementById("testCount").value;
       const testCountNum = Number(testCountRaw);
-      const testCount = testCountRaw === '' ? 2 : (Number.isNaN(testCountNum) ? 2 : Math.max(0, testCountNum));
+      const testCount = testCountRaw === '' ? 5 : (Number.isNaN(testCountNum) ? 2 : Math.max(0, testCountNum));
       const stopThreshold = Math.max(1, Number(document.getElementById("stopThreshold").value) || 150);
 
       const goBtn = document.getElementById("go");
