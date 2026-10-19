@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Speed Test</title>
+  <style>
+    :root{--c-red:#E60000;--c-green:#00BF00;--c-orange:#FF8000;}
+    html,body{height:100%;margin:0}
+    body{display:flex;align-items:center;justify-content:center;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;padding:16px;box-sizing:border-box;}
+    .card{background:#fff;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,.08);padding:40px 24px;width:100%;max-width:420px;box-sizing:border-box;}
+    .logo{text-align:center;margin-bottom:24px;}
+    .logo-text{font-size:40px;font-weight:800;color:#111827;letter-spacing:-0.5px;}
+    .ip-display{text-align:center;color:#6b7280;font-size:14px;margin-bottom:28px;padding:12px;background:#f9fafb;border-radius:12px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;}
+    .ip-display #country-flag{font-size:16px;margin-right:4px;}
+    .input-group{margin-bottom:16px}
+    label{font-size:13px;color:#374151;display:block;margin-bottom:6px;font-weight:600}
+    input,select{width:100%;padding:10px 12px;border:1px solid #111827;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;-webkit-tap-highlight-color:transparent;background:#fff;}
+    input:focus,select:focus{border-color:#111827}
+    .input-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    button{width:100%;padding:14px 0;background:#000;color:#fff;font-size:16px;font-weight:600;border:none;border-radius:12px;cursor:pointer;margin-top:8px;margin-bottom:12px;-webkit-tap-highlight-color:transparent;}
+    .test-info{text-align:center;font-size:12px;color:#9ca3af;margin:8px 0 16px;}
+    .results{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px;}
+    .metric{text-align:center;padding:20px 12px;background:#f9fafb;border-radius:12px;border:1px solid #e5e7eb;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+    .metric-label{font-size:11px;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+    .metric-value{font-size:18px;font-weight:700;color:#111827;line-height:1.2;}
+    .metric-unit{font-size:12px;color:#9ca3af;margin-left:2px;}
+    .speed-footer{height:1px;margin-top:8px;text-align:center;font-size:12px;color:#6b7280;}
+    /* 密码门 */
+    #pwdGate{position:fixed;inset:0;background:#f3f4f6;display:flex;align-items:center;justify-content:center;z-index:99;padding:16px;box-sizing:border-box;}
+    #pwdGate .card{padding:28px 20px;}
+    #pwdGate h2{margin:0 0 20px;font-size:20px;text-align:center}
+    #pwdErr{color:var(--c-red);font-size:14px;text-align:center;margin-top:12px;display:none}
+    @media (max-width:480px){.logo-text{font-size:36px}.card{padding:32px 20px}.results{grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px}.metric{padding:12px 6px;min-width:0;word-break:break-all}}
+  </style>
+</head>
+<body>
+  <!-- ==================== 密码门（部署前改这里） ====================
+       PAGE_PASSWORD 留空字符串 = 不设密码直接进；
+       注意：纯前端校验只挡君子不挡小人，防的是随手乱逛的人。 -->
+  <script>
+    const PAGE_PASSWORD = 'qqww';   // 留空 = 免密
+  </script>
+  <div id="pwdGate" style="display:none">
+    <div class="card" style="max-width:320px">
+      <h2>请输入密码</h2>
+      <input id="pwd" class="field" type="password" placeholder="输入密码" style="width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border:1px solid #111827;border-radius:8px;margin-bottom:16px;font-weight:bold;outline:none"
+             onkeypress="if(event.key==='Enter')tryEnter()">
+      <button onclick="tryEnter()">进入</button>
+      <div id="pwdErr">密码错误</div>
+    </div>
+  </div>
+
+  <div class="card" id="mainCard" style="display:none">
+    <div class="logo"><div class="logo-text">Speed Test</div></div>
+    <div class="ip-display">
+      <span id="country-flag">🏳️</span>
+      IP: <span id="ip" data-real="">*.*.*.*</span>
+    </div>
+
+    <div class="input-group">
+      <label for="size">文件大小（GitHub Pages 同源自带文件）</label>
+      <select id="size">
+        <option value="5" selected>5 MB</option>
+        <option value="10">10 MB</option>
+      </select>
+    </div>
+
+    <div class="input-row">
+      <div class="input-group">
+        <label for="lowTime">低速时长 (秒)</label>
+        <input id="lowTime" type="number" value="2" min="1" max="60">
+      </div>
+      <div class="input-group">
+        <label for="lowThreshold">低速阈值 (Mbps)</label>
+        <input id="lowThreshold" type="number" value="30" min="1" max="1000">
+      </div>
+    </div>
+
+    <div class="input-group">
+      <label for="respTimeout">响应超时 (秒)</label>
+      <input id="respTimeout" type="number" value="1" min="1" max="30">
+    </div>
+
+    <div class="input-row">
+      <div class="input-group">
+        <label for="testCount">测试次数 (次)</label>
+        <input id="testCount" type="number" value="0" min="0" max="999">
+      </div>
+      <div class="input-group">
+        <label for="stopThreshold">停止阈值 (Mbps)</label>
+        <input id="stopThreshold" type="number" value="100" min="1" max="10000">
+      </div>
+    </div>
+
+    <button id="go">开始测速</button>
+
+    <div class="results" id="results" style="display:grid">
+      <div class="metric">
+        <div class="metric-label">速度</div>
+        <div class="metric-value"><span id="speed">-</span><span class="metric-unit">Mbps</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">延迟</div>
+        <div class="metric-value"><span id="latency">-</span><span class="metric-unit">ms</span></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">速度</div>
+        <div class="metric-value"><span id="speed-alt">-</span><span class="metric-unit">MB/s</span></div>
+      </div>
+    </div>
+
+    <div class="speed-footer" id="speed-footer"></div>
+    <div class="test-info" id="localStats" style="margin-top:10px;"></div>
+  </div>
+
+  <script>
+  // ==================== 密码门逻辑 ====================
+  function tryEnter(){
+    const p = document.getElementById('pwd').value.trim();
+    const err = document.getElementById('pwdErr');
+    if(!PAGE_PASSWORD){ enterMain(); return; }
+    if(p === PAGE_PASSWORD){ enterMain(); }
+    else { err.style.display='block'; err.textContent = p ? '密码错误' : '密码不能为空'; }
+  }
+  // ---------- 本机流量累计（localStorage，仅当前浏览器）----------
+  const ST_KEY = 'st_local_stats';
+  function readStats(){ try{ return JSON.parse(localStorage.getItem(ST_KEY)) || {b:0,c:0}; }catch(e){ return {b:0,c:0}; } }
+  function addStats(bytes){
+    const t = readStats(); t.b += bytes; t.c += 1;
+    try{ localStorage.setItem(ST_KEY, JSON.stringify(t)); }catch(e){}
+    renderStats();
+    gbAdd(bytes);
+  }
+  function renderStats(){
+    const t = readStats();
+    const el = document.getElementById('localStats');
+    if(el) el.textContent = '本机累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次' + (GB_TOTAL ? ' ｜ 全站加载中…' : '');
+  }
+
+  // ---------- 全站累计（JSONBin 公共计数器，跨设备汇总）----------
+  // 用法：jsonbin.io 注册 → 新建 Bin（内容填 {"b":0,"c":0}）→ 把 Bin ID 和 X-Master-Key 填到下面。
+  // 不想用就留空字符串，页面只显示本机累计，无任何影响。
+  
+  const GB_BIN_ID = '6ad5efeeac6210605a3e6b37';  //← CMD执行 curl.exe -x http://127.0.0.1:10808 -X POST "https://api.jsonbin.io/v3/b" -H "X-Master-Key: $2b$10$你的KEY" -H "Content-Type: application/json" -d "{\"b\":0,\"c\":0}"
+  const GB_KEY    = '$2a$10$03qSBkFkVUR9BZHdh8PNk.TSQUhzaw0IUfrcvIxqa20ACKnH0wHVK';//← 替换成 $2b$10$ 开头的那个 Key
+  const GB_API    = 'https://api.jsonbin.io/v3/b/';
+  let GB_TOTAL = false;
+  async function gbFetch(){
+    const r = await fetch(GB_API + GB_BIN_ID + '/latest', {headers:{'X-Master-Key': GB_KEY}, cache:'no-store'});
+    if(!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    return j.record || {b:0,c:0};
+  }
+  async function gbSave(t){
+    await fetch(GB_API + GB_BIN_ID, {
+      method:'PUT', cache:'no-store',
+      headers:{'X-Master-Key': GB_KEY, 'Content-Type':'application/json'},
+      body: JSON.stringify(t)
+    });
+  }
+  function renderTotal(t){
+    const el = document.getElementById('localStats');
+    if(el) el.textContent = '本机累计：' + (readStats().b/1048576).toFixed(1) + ' MB / ' + readStats().c + ' 次'
+      + ' ｜ 全站累计：' + (t.b/1048576).toFixed(1) + ' MB / ' + t.c + ' 次';
+  }
+  async function gbLoad(){
+    if(!GB_BIN_ID || !GB_KEY) return;
+    GB_TOTAL = true;
+    try{ renderTotal(await gbFetch()); }catch(e){ /* 保持本机口径 */ }
+  }
+  async function gbAdd(bytes){
+    if(!GB_BIN_ID || !GB_KEY) return;
+    try{
+      const t = await gbFetch();
+      t.b += bytes; t.c += 1;
+      await gbSave(t);
+      renderTotal(t);
+    }catch(e){ /* 网络失败时静默，下轮再试 */ }
+  }
+
+  function enterMain(){
+    document.getElementById('pwdGate').style.display='none';
+    document.getElementById('mainCard').style.display='block';
+    renderStats();
+    gbLoad();
+    initMain();
+  }
+  window.addEventListener('DOMContentLoaded', () => {
+    if(PAGE_PASSWORD){
+      document.getElementById('pwdGate').style.display='flex';
+    } else {
+      enterMain();
+    }
+  });
+
+  // ==================== 主页面 ====================
+  function initMain(){
+    // ---------- 国家旗 + IP：三源容错，取到直接显示（不再默认隐藏）----------
+    function applyIP(ip, cc){
+      const ipEl = document.getElementById('ip');
+      const flagEl = document.getElementById('country-flag');
+      if(ip) ipEl.textContent = ip;
+      if(cc && cc.length === 2){
+        flagEl.textContent = String.fromCodePoint(...cc.toUpperCase().split('').map(c => 127397 + c.charCodeAt()));
+      }
+    }
+    async function refreshIP(){
+      // ① ipify：全球可达性最好（含国内直连），先保 IP 能显示
+      try{
+        const r = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+        const j = await r.json();
+        if(j && j.ip) applyIP(j.ip, '');
+      }catch(e){}
+      // ② ipwho.is：带国家码，成功则补上国旗
+      try{
+        const r = await fetch('https://ipwho.is/', {cache:'no-store'});
+        const j = await r.json();
+        if(j && j.success !== false && j.ip){ applyIP(j.ip, j.country_code); return; }
+      }catch(e){}
+      // ③ ipapi.co：最后的带国家码机会
+      try{
+        const r = await fetch('https://ipapi.co/json/', {cache:'no-store'});
+        const j = await r.json();
+        if(j && j.ip){ applyIP(j.ip, j.country_code); return; }
+      }catch(e){}
+      // 全失败：明确提示，不再无声占位
+      const ipEl = document.getElementById('ip');
+      if(ipEl.textContent === '*.*.*.*') ipEl.textContent = 'IP获取失败';
+    }
+    refreshIP();
+
+    // ---------- 测速逻辑（同源 files/xxMB.bin，无需 CORS）----------
+    let abortController = null;
+    let activeTimers = [];
+    let currentRunId = 0;
+    let stopLoop = false;
+
+    function clearAllTimers() {
+      activeTimers.forEach(t => { clearTimeout(t); clearInterval(t); });
+      activeTimers = [];
+    }
+
+    function resetUI() {
+      document.getElementById('speed').textContent = '0.00';
+      document.getElementById('speed-alt').textContent = '0.00';
+      document.getElementById('latency').textContent = '-';
+      document.getElementById('speed').style.color = '#111827';
+      document.getElementById('speed-alt').style.color = '#111827';
+      document.getElementById('latency').style.color = '#111827';
+      const footer = document.getElementById('speed-footer');
+      footer.textContent = '';
+      footer.style.color = '';
+    }
+
+    document.getElementById("go").onclick = async () => {
+      const size = document.getElementById("size").value;          // '10' | '50' | '100'
+      const downUrl = 'files/' + size + 'MB.bin';  // 缓存击穿参数在下方 fetch 处拼接
+      const lowTime = Math.max(1, Number(document.getElementById("lowTime").value) || 3);
+      const lowThreshold = Math.max(1, Number(document.getElementById("lowThreshold").value) || 20);
+      const respTimeout = Math.max(1, Number(document.getElementById("respTimeout").value) || 2);
+      const testCountRaw = document.getElementById("testCount").value;
+      const testCountNum = Number(testCountRaw);
+      const testCount = testCountRaw === '' ? 2 : (Number.isNaN(testCountNum) ? 2 : Math.max(0, testCountNum));
+      const stopThreshold = Math.max(1, Number(document.getElementById("stopThreshold").value) || 150);
+
+      const goBtn = document.getElementById("go");
+      const speedFooter = document.getElementById('speed-footer');
+      const speedEl = document.getElementById('speed');
+      const speedAltEl = document.getElementById('speed-alt');
+      const latencyEl = document.getElementById('latency');
+
+      // ========== 停止当前测速 ==========
+      if (abortController) {
+        stopLoop = true;
+        abortController.abort();
+        clearAllTimers();
+        ++currentRunId;
+        goBtn.textContent = "开始测速";
+        goBtn.disabled = false;
+        abortController = null;
+        speedFooter.textContent = '测速已停止';
+        speedFooter.style.color = 'var(--c-red)';
+        return;
+      }
+
+      // ========== 开启循环测速 ==========
+      const maxLoop = testCount === 0 ? Infinity : testCount;
+      stopLoop = false;
+      let loopIndex = 0;
+
+      while (!stopLoop && loopIndex < maxLoop) {
+        loopIndex++;
+        const runId = ++currentRunId;
+        abortController = new AbortController();
+        const signal = abortController.signal;
+
+        if (loopIndex === 1) {
+          goBtn.textContent = "停止";
+          goBtn.disabled = false;
+        }
+
+        document.getElementById("results").style.display = 'grid';
+        resetUI();
+
+        if (maxLoop === Infinity) {
+          speedFooter.textContent = '第 ' + loopIndex + ' 次循环测速中...';
+        } else {
+          speedFooter.textContent = '第 ' + loopIndex + ' 次 / 共 ' + maxLoop + ' 次';
+        }
+        speedFooter.style.color = '#6b7280';
+
+        let receivedBytes = 0;
+        let t0 = performance.now();
+        let earlyStop = false;
+        let deadNode = false;
+        let hasResponse = false;
+        let testFinished = false;
+        let normalDone = false;
+
+        // 首次响应超时
+        activeTimers.push(setTimeout(() => {
+          if (runId !== currentRunId || testFinished) return;
+          if (!hasResponse) {
+            deadNode = true;
+            if (abortController) abortController.abort();
+          }
+        }, respTimeout * 1000));
+
+        // 后台安全定时器
+        const safetyInterval = setInterval(() => {
+          if (runId !== currentRunId || testFinished || !hasResponse || earlyStop || deadNode) return;
+          const elapsed = (performance.now() - t0) / 1000;
+          const mbps = receivedBytes > 0 ? (receivedBytes * 8) / elapsed / 1e6 : 0;
+          if (elapsed >= lowTime && mbps < lowThreshold) {
+            earlyStop = true;
+            if (abortController) abortController.abort();
+          }
+        }, 200);
+        activeTimers.push(safetyInterval);
+
+        try {
+          // ===== 下载任务：同源 files/xxMB.bin =====
+          const downPromise = (async () => {
+            t0 = performance.now();
+            const downRes = await fetch(downUrl + '?r=' + runId + '_' + Math.random().toString(36).slice(2), { signal, cache: 'no-store' });
+
+            if (runId === currentRunId && !testFinished && !hasResponse) {
+              hasResponse = true;
+            }
+
+            if (!downRes.ok) throw new Error('下载失败');
+
+            const reader = downRes.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) { normalDone = true; break; }
+              receivedBytes += value.length;
+
+              if (runId === currentRunId && !testFinished) {
+                const now = performance.now();
+                const elapsedSec = (now - t0) / 1000;
+                const currentSpeedMbps = (receivedBytes * 8) / elapsedSec / 1e6;
+                const currentSpeedMbs = currentSpeedMbps / 8;
+                speedEl.textContent = currentSpeedMbps.toFixed(2);
+                speedAltEl.textContent = currentSpeedMbs.toFixed(2);
+
+                if (elapsedSec >= lowTime && currentSpeedMbps < lowThreshold) {
+                  earlyStop = true;
+                  abortController.abort();
+                  break;
+                }
+              }
+            }
+          })();
+
+          // ===== Ping 任务：对本站 HEAD 请求 =====
+          const pingPromise = (async () => {
+            const pingStart = performance.now();
+            const pingCtrl = new AbortController();
+            const onMainAbort = () => pingCtrl.abort();
+            signal.addEventListener('abort', onMainAbort);
+
+            const pingTimeout = setTimeout(() => pingCtrl.abort(), respTimeout * 1000);
+            activeTimers.push(pingTimeout);
+
+            try {
+              await fetch(location.href, { method: 'HEAD', signal: pingCtrl.signal });
+              clearTimeout(pingTimeout);
+              signal.removeEventListener('abort', onMainAbort);
+
+              if (runId !== currentRunId || testFinished) return;
+              if (!hasResponse) hasResponse = true;
+              const latency = Math.round(performance.now() - pingStart);
+              latencyEl.textContent = latency;
+              latencyEl.style.color = latency < 200 ? 'var(--c-green)' : latency < 500 ? 'var(--c-orange)' : 'var(--c-red)';
+            } catch (e) {
+              clearTimeout(pingTimeout);
+              signal.removeEventListener('abort', onMainAbort);
+            }
+          })();
+
+          await Promise.all([downPromise, pingPromise]);
+        } catch (e) {
+          // abort 或网络异常，静默处理
+        } finally {
+          testFinished = true;
+          if (runId !== currentRunId) {
+            clearAllTimers();
+            return;
+          }
+          clearAllTimers();
+
+          if (!deadNode && !hasResponse && receivedBytes === 0) {
+            deadNode = true;
+          }
+
+          const sec = (performance.now() - t0) / 1000;
+          const bits = receivedBytes * 8;
+          const mbps = sec > 0 ? (bits / sec / 1e6).toFixed(2) : '0.00';
+          const mbs = (parseFloat(mbps) / 8).toFixed(2);
+          const fileSizeMB = (receivedBytes / 1024 / 1024).toFixed(1);
+
+          if (deadNode) {
+            speedEl.textContent = '-';
+            speedAltEl.textContent = '-';
+            latencyEl.textContent = '-';
+            speedFooter.textContent = '节点无响应（' + respTimeout + '秒超时），已终止';
+            speedFooter.style.color = 'var(--c-red)';
+          } else if (earlyStop) {
+            speedEl.textContent = mbps;
+            speedAltEl.textContent = mbs;
+            speedFooter.textContent = '用时: ' + sec.toFixed(2) + 's，流量: ' + fileSizeMB + 'MB （低速提前停止）';
+            speedFooter.style.color = 'var(--c-red)';
+            const finalMbps = parseFloat(mbps);
+            const color = finalMbps >= 100 ? 'var(--c-green)' : finalMbps >= 50 ? 'var(--c-orange)' : 'var(--c-red)';
+            speedEl.style.color = color;
+            speedAltEl.style.color = color;
+          } else if (!normalDone) {
+            speedEl.textContent = mbps;
+            speedAltEl.textContent = mbs;
+            speedFooter.textContent = '测速异常中断';
+            speedFooter.style.color = 'var(--c-red)';
+            const finalMbps = parseFloat(mbps);
+            const color = finalMbps >= 100 ? 'var(--c-green)' : finalMbps >= 50 ? 'var(--c-orange)' : 'var(--c-red)';
+            speedEl.style.color = color;
+            speedAltEl.style.color = color;
+          } else {
+            speedEl.textContent = mbps;
+            speedAltEl.textContent = mbs;
+            speedFooter.textContent = '用时: ' + sec.toFixed(2) + 's，流量: ' + fileSizeMB + 'MB';
+            speedFooter.style.color = 'var(--c-green)';
+            const finalMbps = parseFloat(mbps);
+            const color = finalMbps >= 100 ? 'var(--c-green)' : finalMbps >= 50 ? 'var(--c-orange)' : 'var(--c-red)';
+            speedEl.style.color = color;
+            speedAltEl.style.color = color;
+          }
+
+          addStats(receivedBytes);
+
+          if (!deadNode && parseFloat(mbps) >= stopThreshold) {
+            stopLoop = true;
+            speedFooter.textContent += ' （达到停止阈值 ' + stopThreshold + ' Mbps，循环已停止）';
+            speedFooter.style.color = 'var(--c-green)';
+          }
+
+          if (loopIndex >= maxLoop || stopLoop) {
+            goBtn.textContent = "开始测速";
+            goBtn.disabled = false;
+            abortController = null;
+          }
+
+          refreshIP();
+        }
+      }
+    };
+  }
+  </script>
+</body>
+</html>
